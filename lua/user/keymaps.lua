@@ -81,3 +81,55 @@ keymap("n", "<leader>dt", "<cmd>lua require'dap'.terminate()<cr>", opts)
 
 -- Lsp
 keymap("n", "<leader>lf", "<cmd>lua vim.lsp.buf.format{ async = true }<cr>", opts)
+
+-- Julia workflow
+keymap("n", "<C-j><C-o>", ":Repl julia<cr>")
+
+vim.g.runcodecell = function (postposition)
+    vim.g.sendkeys = function (keys)
+        vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(keys, true, false, true), 'n', true)
+    end
+    local sendkeys = vim.g.sendkeys
+
+    local current_file = vim.api.nvim_buf_get_name(0)
+    local file_length = vim.api.nvim_buf_line_count(0)
+    local current_line = vim.api.nvim_win_get_cursor(0)[1]
+    vim.cmd("?##")
+    local prev_line = vim.api.nvim_win_get_cursor(0)[1]
+    vim.cmd("/##")
+    local next_line = vim.api.nvim_win_get_cursor(0)[1]
+    if (current_line == prev_line) or (current_line == next_line) then
+        -- ambiguous selection
+        error("Ambiguous code cell, please move into a code cell")
+    elseif (prev_line == 1) or (prev_line > current_line) then
+        -- for cases where the code block is at the beginning
+        -- and the ## delimiter is on top
+        -- or the ## delimiter does not exist
+        sendkeys(next_line .. "GI#=<Esc>GA=#<Esc>")
+    elseif (next_line == file_length) or (next_line < current_line) then
+        -- for cases where code block is at the end
+        -- and the ## delimiter does not exist
+        -- or the ## delimiter does not exist
+        sendkeys(prev_line .. "GI=#<Esc>ggI#=<Esc>")
+    elseif (current_line > prev_line) and (current_line < next_line) then
+        -- for case where the code block is in the middle
+        sendkeys(prev_line .. "GI=#<Esc>ggI#=<Esc>")
+        sendkeys(next_line .. "GI#=<Esc>GA=#<Esc>")
+    else
+        print("Couldn't figure out code cell block. Line numbers:")
+        print(current_line, prev_line, next_line)
+    end
+
+    sendkeys(":w<cr>")
+    sendkeys(':ReplSend include("' .. current_file .. '")<cr>')
+    sendkeys("u")
+    if postposition == "same" then
+        sendkeys(current_line .. "G")
+    elseif postposition == "next" then
+        print("post position")
+        sendkeys(next_line .. "Gj")
+    end
+    sendkeys(":w<cr>")
+end
+keymap("n", "<M-cr>", '<cmd>lua vim.g.runcodecell("same")<cr>')
+keymap("n", "<M-\\>", '<cmd>lua vim.g.runcodecell("next")<cr>')
